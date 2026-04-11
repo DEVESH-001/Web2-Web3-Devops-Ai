@@ -1,12 +1,12 @@
 import { View, Text } from 'react-native'
 import React from 'react'
 
-const Subscriptions = () => {
+const SubscriptionsScreen = () => {
   return (
     <View>
-      <Text>Subscriptions</Text>
+      <Text>SubscriptionsScreen</Text>
     </View>
   )
 }
 
-export default Subscriptions
+export default SubscriptionsScreen

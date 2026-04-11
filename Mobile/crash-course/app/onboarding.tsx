@@ -4,7 +4,7 @@ import React from "react";
 const Onboarding = () => {
   return (
     <View>
-      <Text>Onboarding</Text>
+      <Text>Onboarding Screen</Text>
     </View>
   );
 };
