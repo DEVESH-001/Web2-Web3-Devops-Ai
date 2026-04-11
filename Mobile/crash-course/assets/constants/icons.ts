@@ -1,3 +1,5 @@
+// this file contains all the icons used in the app, we are importing them here to avoid importing them in every file
+
 import activity from "@/assets/icons/activity.png";
 import add from "@/assets/icons/add.png";
 import adobe from "@/assets/icons/adobe.png";

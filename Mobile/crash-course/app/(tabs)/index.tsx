@@ -1,10 +1,14 @@
 import "@/global.css";
 import { Link } from "expo-router";
-import { Text, View } from "react-native";
+import { Text } from "react-native";
+import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context"; //SAV is 3rd party component, so we need to import it like this
+import { styled } from "nativewind";
+
+const SafeAreaView = styled(RNSafeAreaView); //we need to wrap the SAV with styled to make it work with nativewind
 
 export default function App() {
   return (
-    <View className="flex-1 items-center justify-center bg-white">
+    <SafeAreaView className="bg-background flex-1 p-5">
       <Text className="text-success text-xl font-bold">
         Welcome to Nativewind!
       </Text>
@@ -41,6 +45,6 @@ export default function App() {
       >
         Claude Max Subscription
       </Link>
-    </View>
+    </SafeAreaView>
   );
 }
