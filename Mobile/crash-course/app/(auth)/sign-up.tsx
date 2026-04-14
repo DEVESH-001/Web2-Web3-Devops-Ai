@@ -1,13 +1,370 @@
-import { View, Text } from "react-native";
-import React from "react";
-import { Link } from "expo-router";
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  ScrollView,
+  ActivityIndicator,
+  Linking,
+  Alert,
+} from "react-native";
+import React, { useEffect } from "react";
+import { Link, useRouter, type Href } from "expo-router";
+import { useSignUp, useAuth, useOAuth } from "@clerk/expo";
+import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context";
+import { styled } from "nativewind";
+import { usePostHog } from "posthog-react-native";
+
+const SafeAreaView = styled(RNSafeAreaView);
 
 const SignUp = () => {
+  const { signUp, errors, fetchStatus } = useSignUp();
+  const { isSignedIn } = useAuth();
+  const router = useRouter();
+  const posthog = usePostHog();
+
+  // All hooks must be called before any conditional returns
+  const { startOAuthFlow: startGoogleOAuth } = useOAuth({
+    strategy: "oauth_google",
+  });
+
+  const [emailAddress, setEmailAddress] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [code, setCode] = React.useState("");
+  const [isResendingCode, setIsResendingCode] = React.useState(false);
+
+  // Navigate when signed in
+  useEffect(() => {
+    if (isSignedIn) {
+      router.replace("/(tabs)" as Href);
+    }
+  }, [isSignedIn, router]);
+
+  // Guard: signUp can be undefined while Clerk initializes
+  if (!signUp) {
+    return (
+      <SafeAreaView className="auth-safe-area">
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#ea7a53" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const handleSubmit = async () => {
+    const { error } = await signUp.password({
+      emailAddress,
+      password,
+    });
+    if (error) {
+      console.error(JSON.stringify(error, null, 2));
+      return;
+    }
+
+    // Email code is sent after the error check (execution only reaches here if no error)
+    await signUp.verifications.sendEmailCode();
+  };
+
+  const handleVerify = async () => {
+    try {
+      // verifyEmailCode returns { error } - check for errors first
+      const { error } = await signUp.verifications.verifyEmailCode({ code });
+
+      if (error) {
+        console.error("Verification error:", error);
+        Alert.alert(
+          "Verification Failed",
+          error.message || "Invalid or expired code.",
+        );
+        return;
+      }
+
+      // After successful verification, check signUp.status which is now updated
+      if (signUp.status === "complete") {
+        posthog.identify(emailAddress, {
+          $set: { email: emailAddress },
+          $set_once: { signup_date: new Date().toISOString() },
+        });
+        posthog.capture("user_signed_up", { method: "email" });
+        await signUp.finalize({
+          navigate: ({ session, decorateUrl }) => {
+            if (session?.currentTask) {
+              console.log(session?.currentTask);
+              return;
+            }
+            const url = decorateUrl("/");
+            if (url.startsWith("http")) {
+              // Use Linking for external URLs on native platforms
+              Linking.openURL(url).catch((err) => {
+                console.error("Failed to open URL:", err);
+              });
+            } else {
+              router.replace(url as Href);
+            }
+          },
+        });
+      } else {
+        console.error("Sign-up attempt not complete:", signUp);
+        Alert.alert(
+          "Verification Failed",
+          "Unable to verify code. Please try again.",
+        );
+      }
+    } catch (err) {
+      console.error("Verify error:", err);
+      Alert.alert(
+        "Verification Failed",
+        "Invalid or expired code. Please try again.",
+      );
+    }
+  };
+
+  const handleResendCode = async () => {
+    setIsResendingCode(true);
+    try {
+      await signUp.verifications.sendEmailCode();
+      Alert.alert(
+        "Code Sent",
+        "A new verification code has been sent to your email.",
+      );
+    } catch (err) {
+      console.error("Resend code error:", err);
+      Alert.alert("Error", "Failed to resend code. Please try again.");
+    } finally {
+      setIsResendingCode(false);
+    }
+  };
+
+  const handleGoogleSignUp = async () => {
+    try {
+      const { createdSessionId, setActive } = await startGoogleOAuth();
+      if (createdSessionId && setActive) {
+        await setActive({ session: createdSessionId });
+        posthog.capture("user_signed_up", { method: "google" });
+        router.replace("/(tabs)" as Href);
+      }
+    } catch (err) {
+      console.error("Google sign-up error:", err);
+    }
+  };
+
+  // Guard signUp before checking status - early return after all hooks
+  if (isSignedIn || signUp?.status === "complete") return null;
+
+  if (
+    signUp.status === "missing_requirements" &&
+    signUp.unverifiedFields?.includes("email_address") &&
+    signUp.missingFields?.length === 0
+  ) {
+    return (
+      <SafeAreaView className="auth-safe-area">
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View className="auth-content">
+            <View className="auth-brand-block">
+              <View className="auth-logo-wrap">
+                <View className="auth-logo-mark">
+                  <Text className="auth-logo-mark-text">S</Text>
+                </View>
+                <View>
+                  <Text className="auth-wordmark">SubTrack</Text>
+                  <Text className="auth-wordmark-sub">
+                    Subscription Tracker
+                  </Text>
+                </View>
+              </View>
+              <Text className="auth-title">Verify Your Email</Text>
+              <Text className="auth-subtitle">
+                Enter the verification code sent to your email
+              </Text>
+            </View>
+
+            <View className="auth-card">
+              <View className="auth-form">
+                <View className="auth-field">
+                  <Text className="auth-label">Verification Code</Text>
+                  <TextInput
+                    className={
+                      errors.fields?.code
+                        ? "auth-input auth-input-error"
+                        : "auth-input"
+                    }
+                    value={code}
+                    placeholder="Enter code"
+                    placeholderTextColor="rgba(0,0,0,0.4)"
+                    onChangeText={setCode}
+                    keyboardType="numeric"
+                  />
+                  {errors.fields?.code && (
+                    <Text className="auth-error">
+                      {errors.fields.code.message}
+                    </Text>
+                  )}
+                </View>
+
+                <Pressable
+                  className={
+                    code && fetchStatus !== "fetching"
+                      ? "auth-button"
+                      : "auth-button auth-button-disabled"
+                  }
+                  onPress={handleVerify}
+                  disabled={!code || fetchStatus === "fetching"}
+                >
+                  {fetchStatus === "fetching" ? (
+                    <ActivityIndicator color="#081126" />
+                  ) : (
+                    <Text className="auth-button-text">Verify</Text>
+                  )}
+                </Pressable>
+
+                <Pressable
+                  className={`auth-secondary-button ${isResendingCode ? "opacity-60" : ""}`}
+                  onPress={handleResendCode}
+                  disabled={isResendingCode}
+                >
+                  {isResendingCode ? (
+                    <ActivityIndicator color="#ea7a53" size="small" />
+                  ) : (
+                    <Text className="auth-secondary-button-text">
+                      Resend Code
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <View>
-      <Text>SignUp</Text>
-      <Link href={"/(auth)/sign-in"}>Sign In</Link>
-    </View>
+    <SafeAreaView className="auth-safe-area">
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View className="auth-content">
+          {/* Brand block */}
+          <View className="auth-brand-block">
+            <View className="auth-logo-wrap">
+              <View className="auth-logo-mark">
+                <Text className="auth-logo-mark-text">S</Text>
+              </View>
+              <View>
+                <Text className="auth-wordmark">SubTrack</Text>
+                <Text className="auth-wordmark-sub">Subscription Tracker</Text>
+              </View>
+            </View>
+            <Text className="auth-title">Create Account</Text>
+            <Text className="auth-subtitle">
+              Start tracking your subscriptions today
+            </Text>
+          </View>
+
+          {/* Form card */}
+          <View className="auth-card">
+            <View className="auth-form">
+              <View className="auth-field">
+                <Text className="auth-label">Email Address</Text>
+                <TextInput
+                  className={
+                    errors.fields?.emailAddress
+                      ? "auth-input auth-input-error"
+                      : "auth-input"
+                  }
+                  autoCapitalize="none"
+                  value={emailAddress}
+                  placeholder="you@example.com"
+                  placeholderTextColor="rgba(0,0,0,0.4)"
+                  onChangeText={setEmailAddress}
+                  keyboardType="email-address"
+                  autoCorrect={false}
+                />
+                {errors.fields?.emailAddress && (
+                  <Text className="auth-error">
+                    {errors.fields.emailAddress.message}
+                  </Text>
+                )}
+              </View>
+
+              <View className="auth-field">
+                <Text className="auth-label">Password</Text>
+                <TextInput
+                  className={
+                    errors.fields?.password
+                      ? "auth-input auth-input-error"
+                      : "auth-input"
+                  }
+                  value={password}
+                  placeholder="Create a strong password"
+                  placeholderTextColor="rgba(0,0,0,0.4)"
+                  secureTextEntry
+                  onChangeText={setPassword}
+                  autoCorrect={false}
+                />
+                {errors.fields?.password && (
+                  <Text className="auth-error">
+                    {errors.fields.password.message}
+                  </Text>
+                )}
+              </View>
+
+              <Pressable
+                className={
+                  emailAddress && password && fetchStatus !== "fetching"
+                    ? "auth-button"
+                    : "auth-button auth-button-disabled"
+                }
+                onPress={handleSubmit}
+                disabled={
+                  !emailAddress || !password || fetchStatus === "fetching"
+                }
+              >
+                {fetchStatus === "fetching" ? (
+                  <ActivityIndicator color="#081126" />
+                ) : (
+                  <Text className="auth-button-text">Create Account</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Divider */}
+          <View className="auth-divider-row">
+            <View className="auth-divider-line" />
+            <Text className="auth-divider-text">or</Text>
+            <View className="auth-divider-line" />
+          </View>
+
+          {/* Google OAuth */}
+          <Pressable
+            className="auth-secondary-button"
+            onPress={handleGoogleSignUp}
+          >
+            <Text className="auth-secondary-button-text">
+              Continue with Google
+            </Text>
+          </Pressable>
+
+          {/* Sign in link */}
+          <View className="auth-link-row">
+            <Text className="auth-link-copy">Already have an account?</Text>
+            <Link href="/(auth)/sign-in" asChild>
+              <Pressable>
+                <Text className="auth-link">Sign In</Text>
+              </Pressable>
+            </Link>
+          </View>
+
+          {/* Clerk captcha for bot protection */}
+          <View nativeID="clerk-captcha" />
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 

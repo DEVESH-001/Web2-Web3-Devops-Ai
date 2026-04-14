@@ -1,6 +1,7 @@
-import { Tabs } from "expo-router";
+import { useAuth } from "@clerk/expo";
+import { Redirect, Tabs } from "expo-router";
 import { tabs } from "@/assets/constants/data";
-import { View, Image } from "react-native";
+import { View, Image, ActivityIndicator } from "react-native";
 import { clsx } from "clsx";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,7 +10,20 @@ import { colors, components } from "@/assets/constants/theme";
 const tabBar = components.tabBar; // tabBar is an object with properties like horizontalInset.
 
 export default function TabLayout() {
+  const { isSignedIn, isLoaded } = useAuth();
   const insets = useSafeAreaInsets(); // Get safe area insets for proper positioning
+
+  if (!isLoaded) {
+    return (
+      <View className="bg-background flex-1 items-center justify-center">
+        <ActivityIndicator size="large" color="#ea7a53" />
+      </View>
+    );
+  }
+
+  if (!isSignedIn) {
+    return <Redirect href="/(auth)/sign-in" />;
+  }
   // TabIcon component that renders the icon with proper styling
   const TabIcon = ({ focused, icon }: TabIconProps) => (
     <View className="tabs-icon">

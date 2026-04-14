@@ -1,13 +1,13 @@
 import "@/global.css";
 
-import { FlatList, Image, Text, View } from "react-native";
+import { FlatList, Image, Text, View, ActivityIndicator } from "react-native";
 import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context"; //SAV is 3rd party component, so we need to import it like this
 import { styled } from "nativewind";
+import { useUser } from "@clerk/expo";
 import images from "@/assets/constants/images";
 import {
   HOME_BALANCE,
   HOME_SUBSCRIPTIONS,
-  HOME_USER,
   UPCOMING_SUBSCRIPTIONS,
 } from "@/assets/constants/data";
 import { icons } from "@/assets/constants/icons";
@@ -17,12 +17,29 @@ import ListHeading from "@/components/ListHeading";
 import UpcomingSubscriptionCard from "@/components/UpcomingSubscriptionCard";
 import SubscriptionCard from "@/components/SubscriptionCard";
 import { useState } from "react";
+import { usePostHog } from "posthog-react-native";
 const SafeAreaView = styled(RNSafeAreaView); //we need to wrap the SAV with styled to make it work with nativewind
 
 export default function App() {
+  const { user, isLoaded } = useUser();
+  const posthog = usePostHog();
   const [expandedSubscriptionId, setExpandedSubscriptionId] = useState<
     string | null
   >(null); //(this tracks which subs card is explanded)
+
+  // Get display name from Clerk user
+  const userName =
+    user?.firstName ||
+    user?.primaryEmailAddress?.emailAddress?.split("@")[0] ||
+    "User";
+
+  if (!isLoaded) {
+    return (
+      <SafeAreaView className="bg-background flex-1 items-center justify-center">
+        <ActivityIndicator size="large" color="#ea7a53" />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="bg-background flex-1 p-5">
@@ -33,7 +50,7 @@ export default function App() {
             <View className="home-header">
               <View className="home-user">
                 <Image source={images.avatar} className="home-avatar" />
-                <Text className="home-user-name">{HOME_USER.name}</Text>
+                <Text className="home-user-name">{userName}</Text>
               </View>
               <Image source={icons.add} className="home-add-icon" />
             </View>
@@ -81,12 +98,15 @@ export default function App() {
           <SubscriptionCard
             {...item}
             expanded={expandedSubscriptionId === item.id} //(expanded = true when the subscription is expanded)
-            onPress={() =>
+            onPress={() => {
               //(toggle expand/collapse)
-              setExpandedSubscriptionId((currentId) =>
-                currentId === item.id ? null : item.id,
-              )
-            }
+              const isExpanding = expandedSubscriptionId !== item.id;
+              posthog.capture(
+                isExpanding ? "subscription_expanded" : "subscription_collapsed",
+                { subscription_id: item.id, subscription_name: item.name },
+              );
+              setExpandedSubscriptionId(isExpanding ? item.id : null);
+            }}
           />
         )}
         extraData={expandedSubscriptionId} // (re-renders only when expandedSubscriptionId changes[useful for performance])
