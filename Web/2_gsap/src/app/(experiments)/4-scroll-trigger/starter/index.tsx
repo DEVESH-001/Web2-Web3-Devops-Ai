@@ -6,6 +6,10 @@ import { TitleSection } from "./title";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 
+import { ScrollTrigger } from "gsap/all";
+
+gsap.registerPlugin(ScrollTrigger);
+
 export default function Page() {
   return (
     <>
@@ -21,7 +25,13 @@ function DescriptionSection() {
 
   useGSAP(
     () => {
-      const tl = gsap.timeline();
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: "h2",
+          start: "top top ", // when the top of the h2 hits the top of the viewport
+          markers: true,
+        },
+      });
 
       tl.from("h2", {
         opacity: 0,
@@ -30,7 +40,7 @@ function DescriptionSection() {
     },
     {
       scope: containerRef,
-    }
+    },
   );
 
   return (

@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "experiments": "npx tsx get-experiments.ts",
-    "lint": "eslint"
+    "lint": "biome lint .",
+    "lint:eslint": "eslint",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
@@ -28,6 +32,7 @@
     "three": "^0.181.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.13",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

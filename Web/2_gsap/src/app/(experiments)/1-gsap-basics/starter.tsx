@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import { useGSAP } from "@gsap/react";
 import { SplitText } from "gsap/all";
 
-gsap.registerPlugin(SplitText);
+gsap.registerPlugin(SplitText); // register the plugin, this is required for all GSAP plugins, it tells GSAP that we want to use this plugin in our project
 
 export default function Page() {
   const containerRef = useRef<HTMLDivElement>(null); // ref to the container
@@ -43,24 +43,23 @@ export default function Page() {
   // }, []);
 
   //Gsap created a hook
+
+  // useGSAP is a hook that manages the lifecycle of the animation, it automatically cleans up the animation when the component unmounts(replace useEffect and context)
   useGSAP(
     () => {
       SplitText.create(".title", {
-        type: "chars,words",
-        charsClass: "letter",
-      });
-
-      gsap.to(".title .letter", {
+        type: "chars, words", // this is the type of split we want, we can split by chars, words or lines, we can also combine them
+        charsClass: "letter", // this is the class that will be added to each character, we can use this class to animate each character separately
+      }); // this will split the text into characters and words, and add the class "letter" to each character
+      gsap.from(".title .letter", {
         y: 200,
+        //duration: 10,
         opacity: 0,
         ease: "circ.out",
-        duration: 10,
-        stagger: 0.03, // delay between each letter
+        stagger: 0.03, // stagger is the delay between each animation, it creates a nice effect when animating multiple elements
       });
     },
-    {
-      scope: containerRef,
-    },
+    { scope: containerRef }, // scope is the same as context, it manages the lifecycle of the animation
   );
   return (
     <div className="bg-blue-300 text-black">
